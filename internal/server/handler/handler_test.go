@@ -104,7 +104,9 @@ func TestProcessRequest(t *testing.T) {
 			}
 			request, err := http.NewRequestWithContext(ctx, tt.args.Method, endpoint,
 				bytes.NewBuffer(body))
-
+			if err != nil {
+				t.Errorf("ProcessRequest() error: %v", err)
+			}
 			resp, err := http.DefaultClient.Do(request)
 
 			defer func(Body io.ReadCloser) {
