@@ -3,14 +3,15 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"github.com/xloki21/go-http/internal/model"
+	"github.com/xloki21/go-http/internal/server/apperrors"
 	"github.com/xloki21/go-http/pkg/source"
+	"net"
 	"net/http"
+	"net/url"
 	"sync/atomic"
 	"time"
-
-	mw "github.com/xloki21/go-http/internal/server/middlewares"
 )
 
 const (
@@ -24,11 +25,11 @@ const (
 
 func NewHandlers() *http.ServeMux {
 	mux := new(http.ServeMux)
-	mux.HandleFunc(ApiV1, mw.IncomingRequestCounter(ProcessRequest))
+	mux.HandleFunc(ApiV1, MWChain(ProcessRequest))
 	return mux
 }
 
-func ProcessRequest(w http.ResponseWriter, r *http.Request) {
+func ProcessRequest(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	ctxOps, cancelOPS := context.WithCancel(ctx)
 	defer cancelOPS()
@@ -44,55 +45,55 @@ func ProcessRequest(w http.ResponseWriter, r *http.Request) {
 			cancelOPS()
 		}
 	}()
-
-	if r.Method == http.MethodPost {
-
-		var urlList []model.URL
-		decoder := json.NewDecoder(r.Body)
-		// 1. Check format
-		err := decoder.Decode(&urlList)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
-			return
-		}
-		// 2. Check payload size
-		if len(urlList) == 0 {
-			http.Error(w, "Empty URL List", http.StatusBadRequest)
-			return
-		}
-
-		if len(urlList) > MaxUrlsPerRequest {
-			http.Error(w, "URL List size exceeds limit", http.StatusBadRequest)
-			return
-		}
-
-		// OK-case
-		result, err := source.FetchURLList(ctxOps, urlList, MaxOutgoingRequests, TimeoutPerRequest)
-
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Processing failed: %s", err), http.StatusBadRequest)
-			return
-		}
-		body, err := json.Marshal(result)
-		if err != nil {
-			code := http.StatusInternalServerError
-			http.Error(w, http.StatusText(code), code)
-			return
-		}
-
-		// you must manually call w.WriteHeader before anything writes
-		// to the response to set HTTP codes manually
-		w.WriteHeader(http.StatusOK)
-		_, err = w.Write(body)
-		if err != nil {
-			code := http.StatusInternalServerError
-			http.Error(w, http.StatusText(code), code)
-			return
-		}
-
-	} else {
-		code := http.StatusMethodNotAllowed
-		http.Error(w, http.StatusText(code), code)
-		return
+	if r.Method != http.MethodPost {
+		return apperrors.MethodNotAllowed
 	}
+
+	var urlList []model.URL
+	decoder := json.NewDecoder(r.Body)
+	// 1. Check format
+	err := decoder.Decode(&urlList)
+	if err != nil {
+		return apperrors.InvalidBodyErr
+	}
+	// 2. Check payload size
+	if len(urlList) == 0 {
+		return apperrors.EmptyBodyErr
+	}
+
+	if len(urlList) > MaxUrlsPerRequest {
+		return apperrors.TooBigURLListErr
+	}
+
+	result, err := source.FetchURLList(ctxOps, urlList, MaxOutgoingRequests, TimeoutPerRequest)
+	if err != nil {
+
+		if errors.Is(err, context.DeadlineExceeded) {
+			return apperrors.TimeoutErr
+		}
+		if errors.Is(err, context.Canceled) {
+			return apperrors.RequestCancelledErr
+		}
+
+		if err, ok := err.(*url.Error); ok {
+			if err, ok := err.Err.(*net.OpError); ok {
+				if _, ok := err.Err.(*net.DNSError); ok {
+					return apperrors.URLNotFoundErr
+				}
+			}
+		}
+
+		// common case
+		return apperrors.BadRequestErr
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		return apperrors.InternalErr
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if _, err = w.Write(body); err != nil {
+		return apperrors.InternalErr
+	}
+	return nil
 }

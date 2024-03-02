@@ -4,23 +4,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/xloki21/go-http/internal/model"
 	"github.com/xloki21/go-http/internal/server"
+	"github.com/xloki21/go-http/internal/server/apperrors"
 	"io"
 	"net/http"
-	"strings"
 	"testing"
 )
 
 func TestProcessRequest(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background()) // todo: user request context
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	api := NewHandlers()
-
 	srv := new(server.Server)
+
 	go func() {
-		// run test server
 		if err := srv.Run("localhost", "8080", api); err != nil {
 			fmt.Println(err)
 		}
@@ -36,91 +37,89 @@ func TestProcessRequest(t *testing.T) {
 	host, port := "localhost", "8080"
 	endpoint := fmt.Sprintf("http://%s:%s%s", host, port, ApiV1)
 
-	hugeRequest := strings.Split(strings.Repeat("https://go.dev/images/go-logo-white.svg ", MaxUrlsPerRequest+1), " ")
-	wrongAddressRequest := []string{"https://1go.dev/images/go-logo-white.svg"}
-	bHugeRequest, _ := json.Marshal(hugeRequest)
-	bCorrectRequest, _ := json.Marshal(hugeRequest[:MaxUrlsPerRequest])
-	bWrongAddressRequest, _ := json.Marshal(wrongAddressRequest)
 	type args struct {
-		r *http.Request
+		Method             string
+		URLList            []model.URL
+		TryToCancelRequest bool
 	}
 	tests := []struct {
-		name      string
-		args      args
-		wantsCode int
+		name  string
+		args  args
+		wants apperrors.AppError
 	}{
 		{
-			name: "Send GET Request",
-			args: args{r: func() *http.Request {
-				req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-				if err != nil {
-					t.Errorf("%v", err)
-				}
-				return req
-			}()},
-			wantsCode: http.StatusMethodNotAllowed,
+			name:  "GET Request",
+			args:  args{Method: http.MethodGet, URLList: nil},
+			wants: apperrors.MethodNotAllowed,
 		},
 		{
-			name: "Send POST Request with nil body",
-			args: args{r: func() *http.Request {
-				req, err := http.NewRequest(http.MethodPost, endpoint, nil)
-				if err != nil {
-					t.Errorf("%v", err)
-				}
-				return req
-			}()},
-			wantsCode: http.StatusUnprocessableEntity,
+			name:  "POST Request with incorrect data (body=nil)",
+			args:  args{Method: http.MethodPost, URLList: nil},
+			wants: apperrors.EmptyBodyErr,
 		},
 		{
-			name: "Send POST Request with wrong URL address",
-			args: args{r: func() *http.Request {
-				req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(bWrongAddressRequest))
-				if err != nil {
-					t.Errorf("%v", err)
-				}
-				return req
-			}()},
-			wantsCode: http.StatusBadRequest,
+			name:  "POST Request with incorrect data (incorrect URL)",
+			args:  args{Method: http.MethodPost, URLList: []model.URL{"https://1go.dev"}},
+			wants: apperrors.URLNotFoundErr,
 		},
 		{
-			name: "Send Post Request with URL list size exceeded limit",
-			args: args{r: func() *http.Request {
-				req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint,
-					bytes.NewBuffer(bHugeRequest))
-				if err != nil {
-					t.Errorf("%v", err)
+			name: "Post Request with incorrect data (size(URLList) > MaxUrlsPerRequest)",
+			args: args{Method: http.MethodPost, URLList: func() []model.URL {
+				var urls []model.URL
+				for i := 0; i < MaxUrlsPerRequest+1; i++ {
+					urls = append(urls, "https://go.dev/images/go-logo-white.svg")
 				}
-				return req
+				return urls
 			}()},
-			wantsCode: http.StatusBadRequest,
+			wants: apperrors.TooBigURLListErr,
 		},
 		{
-			name: "Send Post Request with Correct URL List",
-			args: args{r: func() *http.Request {
-				req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint,
-					bytes.NewBuffer(bCorrectRequest))
-
-				if err != nil {
-					t.Errorf("%v", err)
+			name: "Post Request with correct data",
+			args: args{Method: http.MethodPost, URLList: func() []model.URL {
+				var urls []model.URL
+				for i := 0; i < MaxUrlsPerRequest; i++ {
+					urls = append(urls, "https://go.dev/images/go-logo-white.svg")
 				}
-				return req
+				return urls
 			}()},
-			wantsCode: http.StatusOK,
+			wants: apperrors.NilErr,
+		},
+		{
+			name: "Post Request with processing timeout reached",
+			args: args{
+				Method: http.MethodPost,
+				URLList: []model.URL{
+					"http://images.cocodataset.org/zips/train2014.zip",
+					"https://go.dev/images/go-logo-white.svg",
+				},
+			},
+			wants: apperrors.TimeoutErr,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := http.DefaultClient.Do(tt.args.r)
+			var body []byte
+			if len(tt.args.URLList) > 0 {
+				body, _ = json.Marshal(tt.args.URLList)
+			}
+			request, err := http.NewRequestWithContext(ctx, tt.args.Method, endpoint,
+				bytes.NewBuffer(body))
+
+			resp, err := http.DefaultClient.Do(request)
+
 			defer func(Body io.ReadCloser) {
 				if err := Body.Close(); err != nil {
 					t.Errorf("ProcessRequest() error: %v", err)
 				}
 			}(resp.Body)
+
 			if err != nil {
-				t.Errorf("%v", err)
+				if errors.Is(err, context.Canceled) && !tt.args.TryToCancelRequest {
+					t.Errorf("%v", err)
+				}
 			}
-			if resp.StatusCode != tt.wantsCode {
-				t.Errorf("ProcessRequest() getStatusCode = %v, wantsStatusCode = %v", resp.StatusCode, tt.wantsCode)
+			if resp.StatusCode != tt.wants.Code {
+				t.Errorf("ProcessRequest() getStatusCode = %v, wantsStatusCode = %v", resp.StatusCode, tt.wants.Code)
 			}
 		})
 	}
