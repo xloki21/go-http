@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ "macOS-latest" ]
-        go: [ "1.21" ]
+        go: [ "1.21.x" ]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
