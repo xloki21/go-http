@@ -19,7 +19,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: WillAbides/setup-go-faster@v1.8.0
+      - uses: WillAbides/setup-go-faster@v1.14.0
         with:
           go-version: ${{ matrix.go }}
       - name: golangci-lint
