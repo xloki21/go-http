@@ -1,0 +1,41 @@
+name: gochecks
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  gochecks:
+    strategy:
+      matrix:
+        go: ['1.21']
+        os: [macos-latest, ubuntu-latest]
+
+    name: checks
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+      - name: Build
+        run: go build -v ./...
+      - name: Test
+        run: go test -race ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          args: --timeout 3m --verbose
+          version: v1.54
