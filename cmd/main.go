@@ -22,7 +22,7 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal) // check: set channel size == 2?
+	quit := make(chan os.Signal, 1) // check: set channel size == 2?
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 	<-quit
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/xloki21/go-http/internal/server"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -26,7 +27,10 @@ func TestProcessRequest(t *testing.T) {
 	}()
 
 	defer func() {
-		srv.Shutdown(context.Background())
+		err := srv.Shutdown(context.Background())
+		if err != nil {
+			t.Errorf("ProcessRequest() error: %v", err)
+		}
 	}()
 
 	host, port := "localhost", "8080"
@@ -107,12 +111,16 @@ func TestProcessRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resp, err := http.DefaultClient.Do(tt.args.r)
-			defer resp.Body.Close()
+			defer func(Body io.ReadCloser) {
+				if err := Body.Close(); err != nil {
+					t.Errorf("ProcessRequest() error: %v", err)
+				}
+			}(resp.Body)
 			if err != nil {
 				t.Errorf("%v", err)
 			}
 			if resp.StatusCode != tt.wantsCode {
-				t.Errorf("processRequest() getStatusCode = %v, wantsStatusCode = %v", resp.StatusCode, tt.wantsCode)
+				t.Errorf("ProcessRequest() getStatusCode = %v, wantsStatusCode = %v", resp.StatusCode, tt.wantsCode)
 			}
 		})
 	}
