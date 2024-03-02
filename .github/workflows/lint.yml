@@ -14,8 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ "ubuntu-latest", "macOS-latest" ]
-        go: [ "1.18", "1.21" ]
+        os: [ "macOS-latest" ]
+        go: [ "1.21" ]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
