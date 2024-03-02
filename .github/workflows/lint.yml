@@ -18,6 +18,7 @@ jobs:
         go: [ "1.21.x" ]
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/cache@v4
       - uses: actions/checkout@v4
       - uses: WillAbides/setup-go-faster@v1.14.0
         with:
