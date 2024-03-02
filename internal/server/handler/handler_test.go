@@ -4,25 +4,25 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/xloki21/go-http/internal/model"
 	"github.com/xloki21/go-http/internal/server"
 	"github.com/xloki21/go-http/internal/server/apperrors"
 	"io"
 	"net/http"
+	"sync"
 	"testing"
 )
 
-func TestProcessRequest(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func TestServerLoadTesting(t *testing.T) {
+
+	wg := sync.WaitGroup{}
 
 	api := NewHandlers()
 	srv := new(server.Server)
-
+	host, port := "localhost", "8080"
 	go func() {
-		if err := srv.Run("localhost", "8080", api); err != nil {
+		if err := srv.Run(host, port, api); err != nil {
 			fmt.Println(err)
 		}
 	}()
@@ -34,13 +34,107 @@ func TestProcessRequest(t *testing.T) {
 		}
 	}()
 
+	endpoint := fmt.Sprintf("http://%s:%s%s", host, port, ApiV1)
+	URLList := func() []model.URL {
+		var urls []model.URL
+		for i := 0; i < MaxUrlsPerRequest; i++ {
+			urls = append(urls, "https://go.dev/images/go-logo-white.svg")
+		}
+		return urls
+	}()
+
+	type args struct {
+		NumberOfRequests int
+	}
+	tests := []struct {
+		name      string
+		args      args
+		succeeded bool
+	}{
+		{
+			name:      "10% of loading",
+			args:      args{NumberOfRequests: 10},
+			succeeded: true,
+		},
+		{
+			name:      "50% of loading",
+			args:      args{NumberOfRequests: 50},
+			succeeded: true,
+		},
+		{
+			name:      "99% of loading",
+			args:      args{NumberOfRequests: 99},
+			succeeded: true,
+		},
+		{
+			name:      "Post Request with correct 100% of loading",
+			args:      args{NumberOfRequests: 200},
+			succeeded: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var body []byte
+			body, err := json.Marshal(URLList)
+			if err != nil {
+				t.Errorf("ProcessRequest() error: %v", err)
+			}
+			for i := 0; i < tt.args.NumberOfRequests; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint,
+						bytes.NewBuffer(body))
+					if err != nil {
+						t.Errorf("ProcessRequest() error: %v", err)
+					}
+
+					resp, err := http.DefaultClient.Do(request)
+					if err != nil {
+						t.Fail()
+						return
+					}
+					if resp != nil {
+						if resp.StatusCode == apperrors.TooManyRequestsErr.Code {
+							if tt.succeeded {
+								t.Fail()
+								return
+							}
+						}
+					}
+				}()
+			}
+			wg.Wait()
+		})
+	}
+}
+
+func TestProcessRequest(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	api := NewHandlers()
+	srv := new(server.Server)
 	host, port := "localhost", "8080"
+	go func() {
+		if err := srv.Run(host, port, api); err != nil {
+			fmt.Println(err)
+		}
+	}()
+
+	defer func() {
+		err := srv.Shutdown(context.Background())
+		if err != nil {
+			t.Errorf("ProcessRequest() error: %v", err)
+		}
+	}()
+
 	endpoint := fmt.Sprintf("http://%s:%s%s", host, port, ApiV1)
 
 	type args struct {
-		Method             string
-		URLList            []model.URL
-		TryToCancelRequest bool
+		Method  string
+		URLList []model.URL
 	}
 	tests := []struct {
 		name  string
@@ -107,7 +201,11 @@ func TestProcessRequest(t *testing.T) {
 			if err != nil {
 				t.Errorf("ProcessRequest() error: %v", err)
 			}
+
 			resp, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Errorf("ProcessRequest() error: %v", err)
+			}
 
 			defer func(Body io.ReadCloser) {
 				if err := Body.Close(); err != nil {
@@ -115,11 +213,6 @@ func TestProcessRequest(t *testing.T) {
 				}
 			}(resp.Body)
 
-			if err != nil {
-				if errors.Is(err, context.Canceled) && !tt.args.TryToCancelRequest {
-					t.Errorf("%v", err)
-				}
-			}
 			if resp.StatusCode != tt.wants.Code {
 				t.Errorf("ProcessRequest() getStatusCode = %v, wantsStatusCode = %v", resp.StatusCode, tt.wants.Code)
 			}
