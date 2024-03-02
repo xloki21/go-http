@@ -17,7 +17,7 @@ const (
 	ApiV1 = "/api/v1/"
 )
 const (
-	MaxUrlsPerRequest   = 7
+	MaxUrlsPerRequest   = 20
 	MaxOutgoingRequests = 4
 	TimeoutPerRequest   = time.Second
 )
@@ -32,21 +32,16 @@ func ProcessRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctxOps, cancelOPS := context.WithCancel(ctx)
 	defer cancelOPS()
-	requestProcessed := atomic.Bool{} // todo: make atomic?
+	requestProcessed := atomic.Bool{}
 	defer func() {
 		requestProcessed.Store(true)
 	}()
 
 	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				if !requestProcessed.Load() {
-					http.Error(w, "Request cancelled", http.StatusBadRequest)
-					cancelOPS()
-				}
-				return
-			}
+		<-ctx.Done()
+		if !requestProcessed.Load() {
+			http.Error(w, "Request cancelled", http.StatusBadRequest)
+			cancelOPS()
 		}
 	}()
 
