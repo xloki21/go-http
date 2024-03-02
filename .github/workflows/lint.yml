@@ -1,0 +1,35 @@
+name: Lint
+on:
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+  # Optional: allow read access to pull request. Use with `only-new-issues` option.
+  # pull-requests: read
+
+jobs:
+  golangci:
+    name: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ "ubuntu-latest", "macOS-latest" ]
+        go: [ "1.13", "1.22" ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: WillAbides/setup-go-faster@v1.8.0
+        with:
+          go-version: ${{ matrix.go }}
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          args: --timeout 3m --verbose
+          version: v1.54
+      - name: staticccheck
+        uses: dominikh/staticcheck-action@v1.3.0
+        with:
+          install-go: false
+          version: latest
+          cache-key: ${{ matrix.go }}
