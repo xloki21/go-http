@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/xloki21/go-http/internal/model"
 	"github.com/xloki21/go-http/internal/server"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestServerLoadTesting(t *testing.T) {
@@ -111,8 +113,7 @@ func TestServerLoadTesting(t *testing.T) {
 }
 
 func TestProcessRequest(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
 	api := NewHandlers()
 	srv := new(server.Server)
@@ -132,9 +133,15 @@ func TestProcessRequest(t *testing.T) {
 
 	endpoint := fmt.Sprintf("http://%s:%s%s", host, port, ApiV1)
 
+	type Ctx struct {
+		Context  context.Context
+		CancelFn context.CancelFunc
+	}
+
 	type args struct {
 		Method  string
 		URLList []model.URL
+		Ctx     Ctx
 	}
 	tests := []struct {
 		name  string
@@ -143,39 +150,47 @@ func TestProcessRequest(t *testing.T) {
 	}{
 		{
 			name:  "GET Request",
-			args:  args{Method: http.MethodGet, URLList: nil},
+			args:  args{Method: http.MethodGet, URLList: nil, Ctx: Ctx{ctx, nil}},
 			wants: apperrors.MethodNotAllowed,
 		},
 		{
 			name:  "POST Request with incorrect data (body=nil)",
-			args:  args{Method: http.MethodPost, URLList: nil},
+			args:  args{Method: http.MethodPost, URLList: nil, Ctx: Ctx{ctx, nil}},
 			wants: apperrors.EmptyBodyErr,
 		},
 		{
 			name:  "POST Request with incorrect data (incorrect URL)",
-			args:  args{Method: http.MethodPost, URLList: []model.URL{"https://1go.dev"}},
+			args:  args{Method: http.MethodPost, URLList: []model.URL{"https://1go.dev"}, Ctx: Ctx{ctx, nil}},
 			wants: apperrors.URLNotFoundErr,
 		},
 		{
 			name: "Post Request with incorrect data (size(URLList) > MaxUrlsPerRequest)",
-			args: args{Method: http.MethodPost, URLList: func() []model.URL {
-				var urls []model.URL
-				for i := 0; i < MaxUrlsPerRequest+1; i++ {
-					urls = append(urls, "https://go.dev/images/go-logo-white.svg")
-				}
-				return urls
-			}()},
+			args: args{
+				Method: http.MethodPost,
+				URLList: func() []model.URL {
+					var urls []model.URL
+					for i := 0; i < MaxUrlsPerRequest+1; i++ {
+						urls = append(urls, "https://go.dev/images/go-logo-white.svg")
+					}
+					return urls
+				}(),
+				Ctx: Ctx{ctx, nil},
+			},
 			wants: apperrors.TooBigURLListErr,
 		},
 		{
 			name: "Post Request with correct data",
-			args: args{Method: http.MethodPost, URLList: func() []model.URL {
-				var urls []model.URL
-				for i := 0; i < MaxUrlsPerRequest; i++ {
-					urls = append(urls, "https://go.dev/images/go-logo-white.svg")
-				}
-				return urls
-			}()},
+			args: args{
+				Method: http.MethodPost,
+				URLList: func() []model.URL {
+					var urls []model.URL
+					for i := 0; i < MaxUrlsPerRequest; i++ {
+						urls = append(urls, "https://go.dev/images/go-logo-white.svg")
+					}
+					return urls
+				}(),
+				Ctx: Ctx{ctx, nil},
+			},
 			wants: apperrors.NilErr,
 		},
 		{
@@ -186,8 +201,27 @@ func TestProcessRequest(t *testing.T) {
 					"http://images.cocodataset.org/zips/train2014.zip",
 					"https://go.dev/images/go-logo-white.svg",
 				},
+				Ctx: Ctx{ctx, nil},
 			},
 			wants: apperrors.TimeoutErr,
+		},
+		{
+			name: "Post Request with cancellation",
+			args: args{
+				Method: http.MethodPost,
+				URLList: func() []model.URL {
+					var urls []model.URL
+					for i := 0; i < MaxUrlsPerRequest; i++ {
+						urls = append(urls, "https://go.dev/images/go-logo-white.svg")
+					}
+					return urls
+				}(),
+				Ctx: func() Ctx {
+					ctxTimeout, cancelFn := context.WithTimeout(ctx, time.Millisecond*750)
+					return Ctx{Context: ctxTimeout, CancelFn: cancelFn}
+				}(),
+			},
+			wants: apperrors.RequestCancelledErr,
 		},
 	}
 	for _, tt := range tests {
@@ -196,26 +230,36 @@ func TestProcessRequest(t *testing.T) {
 			if len(tt.args.URLList) > 0 {
 				body, _ = json.Marshal(tt.args.URLList)
 			}
-			request, err := http.NewRequestWithContext(ctx, tt.args.Method, endpoint,
+			if tt.args.Ctx.CancelFn != nil {
+				defer tt.args.Ctx.CancelFn()
+			}
+			request, err := http.NewRequestWithContext(tt.args.Ctx.Context, tt.args.Method, endpoint,
 				bytes.NewBuffer(body))
+
 			if err != nil {
 				t.Errorf("ProcessRequest() error: %v", err)
 			}
 
 			resp, err := http.DefaultClient.Do(request)
 			if err != nil {
-				t.Errorf("ProcessRequest() error: %v", err)
-			}
 
-			defer func(Body io.ReadCloser) {
-				if err := Body.Close(); err != nil {
+				if !errors.Is(err, tt.args.Ctx.Context.Err()) {
 					t.Errorf("ProcessRequest() error: %v", err)
 				}
-			}(resp.Body)
-
-			if resp.StatusCode != tt.wants.Code {
-				t.Errorf("ProcessRequest() getStatusCode = %v, wantsStatusCode = %v", resp.StatusCode, tt.wants.Code)
 			}
+
+			if resp != nil {
+				defer func(Body io.ReadCloser) {
+					if err := Body.Close(); err != nil {
+						t.Errorf("ProcessRequest() error: %v", err)
+					}
+				}(resp.Body)
+
+				if resp.StatusCode != tt.wants.Code {
+					t.Errorf("ProcessRequest() getStatusCode = %v, wantsStatusCode = %v", resp.StatusCode, tt.wants.Code)
+				}
+			}
+
 		})
 	}
 }

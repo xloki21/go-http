@@ -16,8 +16,8 @@ func DomainSpecificErrors(next HFuncWithError) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := next(w, r)
 		if err != nil {
-			err := err.(apperrors.AppError)
-			http.Error(w, err.Message, err.Code)
+			errw := err.(apperrors.AppError)
+			http.Error(w, errw.Message, errw.Code)
 		}
 	}
 }

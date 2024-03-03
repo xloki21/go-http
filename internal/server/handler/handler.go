@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sync/atomic"
 	"time"
 )
 
@@ -30,21 +29,6 @@ func NewHandlers() *http.ServeMux {
 }
 
 func ProcessRequest(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	ctxOps, cancelOPS := context.WithCancel(ctx)
-	defer cancelOPS()
-	requestProcessed := atomic.Bool{}
-	defer func() {
-		requestProcessed.Store(true)
-	}()
-
-	go func() {
-		<-ctx.Done()
-		if !requestProcessed.Load() {
-			http.Error(w, "Request cancelled", http.StatusBadRequest)
-			cancelOPS()
-		}
-	}()
 	if r.Method != http.MethodPost {
 		return apperrors.MethodNotAllowed
 	}
@@ -65,7 +49,7 @@ func ProcessRequest(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.TooBigURLListErr
 	}
 
-	result, err := source.FetchURLList(ctxOps, urlList, MaxOutgoingRequests, TimeoutPerRequest)
+	result, err := source.FetchURLList(r.Context(), urlList, MaxOutgoingRequests, TimeoutPerRequest)
 	if err != nil {
 
 		if errors.Is(err, context.DeadlineExceeded) {
