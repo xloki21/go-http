@@ -69,8 +69,8 @@ func TestServerLoadTesting(t *testing.T) {
 			succeeded: true,
 		},
 		{
-			name:      "Post Request with correct 100% of loading",
-			args:      args{NumberOfRequests: 200},
+			name:      "Post Request with correct 110% of loading",
+			args:      args{NumberOfRequests: 110},
 			succeeded: false,
 		},
 	}
