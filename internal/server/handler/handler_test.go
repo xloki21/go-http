@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 func TestServerLoadTesting(t *testing.T) {
@@ -208,20 +207,11 @@ func TestProcessRequest(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			if tt.args.Ctx.CancelFn != nil {
-				wg := sync.WaitGroup{}
-				go func() {
-					wg.Add(1)
-					defer wg.Done()
-					time.Sleep(time.Millisecond * 100)
-					defer tt.args.Ctx.CancelFn()
-
-				}()
-				wg.Wait()
-
+				// special case: cancel request
+				tt.args.Ctx.CancelFn()
 			}
 
 			api.ServeHTTP(w, request)
-
 			if w.Code != tt.wants.Code {
 				t.Errorf("ProcessRequest() getStatusCode = %v, wantsStatusCode = %v", w.Code, tt.wants.Code)
 			}
