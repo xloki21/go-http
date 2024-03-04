@@ -212,7 +212,7 @@ func TestProcessRequest(t *testing.T) {
 				go func() {
 					wg.Add(1)
 					defer wg.Done()
-					time.Sleep(time.Millisecond * 750)
+					time.Sleep(time.Millisecond * 100)
 					defer tt.args.Ctx.CancelFn()
 
 				}()

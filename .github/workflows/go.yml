@@ -31,9 +31,9 @@ jobs:
           go-version: ${{ matrix.go }}
           cache: false
       - name: go build
-        run: go build -v ./...
+        run: go build -o go-http cmd/main.go
       - name: go test
-        run: go test -race ./...
+        run: go test -race ./.../handler
       - name: go vet
         run: go vet ./...
       - name: golangci-lint

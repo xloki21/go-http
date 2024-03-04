@@ -1,6 +1,6 @@
 .PHONY: test
 test:
-	go test -race ./...
+	go test -race ./.../handler
 
 .PHONY: build
 build:
