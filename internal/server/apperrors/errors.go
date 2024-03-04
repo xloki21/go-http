@@ -6,7 +6,7 @@ var (
 	MethodNotAllowed    = AppError{Code: http.StatusMethodNotAllowed, Message: "Method not allowed"}
 	InvalidBodyErr      = AppError{Code: http.StatusBadRequest, Message: "Invalid Request. Unable to decode request body"}
 	BadRequestErr       = AppError{Code: http.StatusBadRequest, Message: "Bad Request"}
-	EmptyBodyErr        = AppError{Code: http.StatusBadRequest, Message: "Invalid Request. Empty body"}
+	EmptyListErr        = AppError{Code: http.StatusBadRequest, Message: "Invalid Request. Empty URL list"}
 	TooBigURLListErr    = AppError{Code: http.StatusBadRequest, Message: "Invalid Request. URL list exceeds maximum length"}
 	InternalErr         = AppError{Code: http.StatusInternalServerError, Message: "Internal Server Error"}
 	Teapot              = AppError{Code: http.StatusTeapot, Message: "Teapot"}

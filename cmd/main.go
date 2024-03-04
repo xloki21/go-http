@@ -12,11 +12,10 @@ import (
 
 func main() {
 	api := handler.NewHandlers()
-	host, port := "localhost", "8080"
-	srv := new(server.Server)
+	srv := server.Server{}
 
 	go func() {
-		fmt.Printf("listening on http://%s:%s\n", host, port)
+		fmt.Printf("listening on http://%s:%s\n", "localhost", "8080")
 		if err := srv.Run("localhost", "8080", api); err != nil {
 			fmt.Println(err)
 		}
@@ -25,8 +24,8 @@ func main() {
 	quit := make(chan os.Signal, 1) // check: set channel size == 2?
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 	<-quit
-
-	if err := srv.Shutdown(context.Background()); err != nil {
+	ctx := context.Background()
+	if err := srv.Shutdown(ctx); err != nil {
 		fmt.Println(err)
 	}
 }

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	ApiV1 = "/api/v1/"
+	ApiV1 = "/api/v1/fetch"
 )
 const (
 	MaxUrlsPerRequest   = 20
@@ -39,10 +39,6 @@ func ProcessRequest(w http.ResponseWriter, r *http.Request) error {
 	err := decoder.Decode(&urlList)
 	if err != nil {
 		return apperrors.InvalidBodyErr
-	}
-	// 2. Check payload size
-	if len(urlList) == 0 {
-		return apperrors.EmptyBodyErr
 	}
 
 	if len(urlList) > MaxUrlsPerRequest {

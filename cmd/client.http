@@ -2,11 +2,11 @@
 
 ###
 # @name Send NotAllowed Method
-GET http://localhost:8080/api/v1/
+GET http://localhost:8080/api/v1/fetch
 
 ###
 # @name Fetch correct URL list
-POST http://localhost:8080/api/v1/
+POST http://localhost:8080/api/v1/fetch
 Content-Type: application/json
 
 [
@@ -15,7 +15,7 @@ Content-Type: application/json
 
 ###
 # @name Fetch huge URL list
-POST http://localhost:8080/api/v1/
+POST http://localhost:8080/api/v1/fetch
 Content-Type: application/json
 
 [
@@ -44,18 +44,18 @@ Content-Type: application/json
 
 ###
 # @name Fetch empty URL list
-POST http://localhost:8080/api/v1/
+POST http://localhost:8080/api/v1/fetch
 Content-Type: application/json
 
 []
 
 ###
 # @name Fetch nil list
-POST http://localhost:8080/api/v1/
+POST http://localhost:8080/api/v1/fetch
 
 ###
 # @name Fetch URL list with URL access time deadline exceeded
-POST http://localhost:8080/api/v1/
+POST http://localhost:8080/api/v1/fetch
 Content-Type: application/json
 
 [
