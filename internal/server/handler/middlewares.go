@@ -2,15 +2,16 @@ package handler
 
 import (
 	"github.com/xloki21/go-http/internal/server/apperrors"
+	"log"
 	"net/http"
+	"runtime/debug"
 	"sync/atomic"
+	"time"
 )
 
 const MaxIncomingRequests = 100
 
 var TotalRequestsInProcessing atomic.Int32
-
-type HFuncWithError func(http.ResponseWriter, *http.Request) error
 
 func DomainSpecificErrors(next HFuncWithError) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -23,10 +24,30 @@ func DomainSpecificErrors(next HFuncWithError) http.HandlerFunc {
 }
 
 func MWChain(hFunc HFuncWithError) http.HandlerFunc {
-	return DomainSpecificErrors(IncomingRequestCounter(hFunc))
+	return DomainSpecificErrors(RequestThrottler(hFunc))
 }
 
-func IncomingRequestCounter(next HFuncWithError) HFuncWithError {
+func Logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, req)
+		log.Printf("%s %s %s", req.Method, req.RequestURI, time.Since(start))
+	})
+}
+
+func PanicRecovery(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				log.Println(string(debug.Stack()))
+			}
+		}()
+		next.ServeHTTP(w, req)
+	})
+}
+
+func RequestThrottler(next HFuncWithError) HFuncWithError {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		TotalRequestsInProcessing.Add(1)
 		defer TotalRequestsInProcessing.Add(-1)

@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	api := handler.NewHandlers()
+	api := handler.NewHandler()
 	srv := server.Server{}
 
 	go func() {

@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/xloki21/go-http/internal/model"
-	"github.com/xloki21/go-http/internal/server"
 	"github.com/xloki21/go-http/internal/server/apperrors"
 	"net/http"
 	"net/http/httptest"
@@ -15,26 +13,9 @@ import (
 	"testing"
 )
 
-func TestServerLoadTesting(t *testing.T) {
+func TestServerLoad(t *testing.T) {
 
-	wg := sync.WaitGroup{}
-
-	api := NewHandlers()
-	srv := new(server.Server)
-	host, port := "localhost", "8080"
-	go func() {
-		if err := srv.Run(host, port, api); err != nil {
-			fmt.Println(err)
-		}
-	}()
-
-	defer func() {
-		err := srv.Shutdown(context.Background())
-		if err != nil {
-			t.Errorf("ProcessRequest() error: %v", err)
-		}
-	}()
-
+	api := NewHandler()
 	URLList := func() []model.URL {
 		var urls []model.URL
 		for i := 0; i < MaxUrlsPerRequest; i++ {
@@ -75,14 +56,15 @@ func TestServerLoadTesting(t *testing.T) {
 			var body []byte
 			body, err := json.Marshal(URLList)
 			if err != nil {
-				t.Errorf("ProcessRequest() error: %v", err)
+				t.Errorf("FetchHandlerFunc() error: %v", err)
 			}
+			wg := sync.WaitGroup{}
 			for i := 0; i < tt.args.NumberOfRequests; i++ {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
 
-					request := httptest.NewRequest(http.MethodPost, ApiV1, bytes.NewBuffer(body))
+					request := httptest.NewRequest(http.MethodPost, Fetch, bytes.NewBuffer(body))
 					w := httptest.NewRecorder()
 
 					api.ServeHTTP(w, request)
@@ -101,7 +83,7 @@ func TestServerLoadTesting(t *testing.T) {
 
 func TestProcessRequest(t *testing.T) {
 	ctx := context.Background()
-	api := NewHandlers()
+	api := NewHandler()
 	type Ctx struct {
 		Context  context.Context
 		CancelFn context.CancelFunc
@@ -133,7 +115,7 @@ func TestProcessRequest(t *testing.T) {
 			wants: apperrors.URLNotFoundErr,
 		},
 		{
-			name: "Post Request with incorrect data (size(URLList) > MaxUrlsPerRequest)",
+			name: "POST Request with incorrect data (size(URLList) > MaxUrlsPerRequest)",
 			args: args{
 				Method: http.MethodPost,
 				URLList: func() []model.URL {
@@ -148,7 +130,7 @@ func TestProcessRequest(t *testing.T) {
 			wants: apperrors.TooBigURLListErr,
 		},
 		{
-			name: "Post Request with correct data",
+			name: "POST Request with correct data",
 			args: args{
 				Method: http.MethodPost,
 				URLList: func() []model.URL {
@@ -163,7 +145,7 @@ func TestProcessRequest(t *testing.T) {
 			wants: apperrors.NilErr,
 		},
 		{
-			name: "Post Request with processing timeout reached",
+			name: "POST Request with processing timeout reached",
 			args: args{
 				Method: http.MethodPost,
 				URLList: []model.URL{
@@ -175,7 +157,7 @@ func TestProcessRequest(t *testing.T) {
 			wants: apperrors.TimeoutErr,
 		},
 		{
-			name: "Post Request with cancellation",
+			name: "POST Request with cancellation",
 			args: args{
 				Method: http.MethodPost,
 				URLList: func() []model.URL {
@@ -202,7 +184,7 @@ func TestProcessRequest(t *testing.T) {
 			if tt.args.Ctx.CancelFn != nil {
 				defer tt.args.Ctx.CancelFn()
 			}
-			request := httptest.NewRequest(tt.args.Method, ApiV1, bytes.NewBuffer(body))
+			request := httptest.NewRequest(tt.args.Method, Fetch, bytes.NewBuffer(body))
 			request = request.WithContext(tt.args.Ctx.Context)
 
 			w := httptest.NewRecorder()
@@ -213,11 +195,11 @@ func TestProcessRequest(t *testing.T) {
 
 			api.ServeHTTP(w, request)
 			if w.Code != tt.wants.Code {
-				t.Errorf("ProcessRequest() getStatusCode = %v, wantsStatusCode = %v", w.Code, tt.wants.Code)
+				t.Errorf("FetchHandlerFunc() getStatusCode = %v, wantsStatusCode = %v", w.Code, tt.wants.Code)
 			}
 			bodyMessage := strings.Trim(w.Body.String(), "\n")
 			if w.Code != http.StatusOK && tt.wants.Message != bodyMessage {
-				t.Errorf("ProcessRequest() getStatusCode = %v, wantsStatusCode = %v", w.Code, tt.wants.Code)
+				t.Errorf("FetchHandlerFunc() getStatusCode = %v, wantsStatusCode = %v", w.Code, tt.wants.Code)
 
 			}
 			//}
