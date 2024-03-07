@@ -6,20 +6,20 @@ import (
 )
 
 const (
-	MaxUrlsPerRequest   = 20
-	MaxOutgoingRequests = 4
-	TimeoutPerRequest   = time.Second
+	maxUrlsPerRequest   = 20
+	maxOutgoingRequests = 4
+	timeoutPerRequest   = time.Second
 )
 
 const (
-	ApiV1 = "/api/v1"
-	Fetch = ApiV1 + "/fetch"
+	apiV1 = "/api/v1"
+	fetch = apiV1 + "/fetch"
 )
 
 type HFuncWithError func(http.ResponseWriter, *http.Request) error
 
 func NewHandler() *http.ServeMux {
 	mux := new(http.ServeMux)
-	mux.HandleFunc(Fetch, MWChain(FetchHandlerFunc))
+	mux.HandleFunc(fetch, MWChain(FetchHandlerFunc))
 	return mux
 }

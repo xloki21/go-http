@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-const MaxIncomingRequests = 100
+const maxIncomingRequests = 100
 
-var TotalRequestsInProcessing atomic.Int32
+var totalRequestsInProcessing atomic.Int32
 
 func DomainSpecificErrors(next HFuncWithError) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -49,9 +49,9 @@ func PanicRecovery(next http.Handler) http.Handler {
 
 func RequestThrottler(next HFuncWithError) HFuncWithError {
 	return func(w http.ResponseWriter, r *http.Request) error {
-		TotalRequestsInProcessing.Add(1)
-		defer TotalRequestsInProcessing.Add(-1)
-		if TotalRequestsInProcessing.Load() >= MaxIncomingRequests {
+		totalRequestsInProcessing.Add(1)
+		defer totalRequestsInProcessing.Add(-1)
+		if totalRequestsInProcessing.Load() >= maxIncomingRequests {
 			return apperrors.TooManyRequestsErr
 		}
 		return next(w, r)

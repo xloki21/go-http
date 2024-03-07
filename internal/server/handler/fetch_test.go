@@ -18,7 +18,7 @@ func TestServerLoad(t *testing.T) {
 	api := NewHandler()
 	URLList := func() []model.URL {
 		var urls []model.URL
-		for i := 0; i < MaxUrlsPerRequest; i++ {
+		for i := 0; i < maxUrlsPerRequest; i++ {
 			urls = append(urls, "https://go.dev/images/go-logo-white.svg")
 		}
 		return urls
@@ -64,7 +64,7 @@ func TestServerLoad(t *testing.T) {
 				go func() {
 					defer wg.Done()
 
-					request := httptest.NewRequest(http.MethodPost, Fetch, bytes.NewBuffer(body))
+					request := httptest.NewRequest(http.MethodPost, fetch, bytes.NewBuffer(body))
 					w := httptest.NewRecorder()
 
 					api.ServeHTTP(w, request)
@@ -81,7 +81,7 @@ func TestServerLoad(t *testing.T) {
 	}
 }
 
-func TestProcessRequest(t *testing.T) {
+func TestFetchHandlerFunc(t *testing.T) {
 	ctx := context.Background()
 	api := NewHandler()
 	type Ctx struct {
@@ -111,7 +111,7 @@ func TestProcessRequest(t *testing.T) {
 		},
 		{
 			name:  "POST Request with incorrect data (incorrect URL)",
-			args:  args{Method: http.MethodPost, URLList: []model.URL{"https://1go.dev"}, Ctx: Ctx{ctx, nil}},
+			args:  args{Method: http.MethodPost, URLList: []model.URL{"https://1godev"}, Ctx: Ctx{ctx, nil}},
 			wants: apperrors.URLNotFoundErr,
 		},
 		{
@@ -120,7 +120,7 @@ func TestProcessRequest(t *testing.T) {
 				Method: http.MethodPost,
 				URLList: func() []model.URL {
 					var urls []model.URL
-					for i := 0; i < MaxUrlsPerRequest+1; i++ {
+					for i := 0; i < maxUrlsPerRequest+1; i++ {
 						urls = append(urls, "https://go.dev/images/go-logo-white.svg")
 					}
 					return urls
@@ -135,7 +135,7 @@ func TestProcessRequest(t *testing.T) {
 				Method: http.MethodPost,
 				URLList: func() []model.URL {
 					var urls []model.URL
-					for i := 0; i < MaxUrlsPerRequest; i++ {
+					for i := 0; i < maxUrlsPerRequest; i++ {
 						urls = append(urls, "https://go.dev/images/go-logo-white.svg")
 					}
 					return urls
@@ -162,7 +162,7 @@ func TestProcessRequest(t *testing.T) {
 				Method: http.MethodPost,
 				URLList: func() []model.URL {
 					var urls []model.URL
-					for i := 0; i < MaxUrlsPerRequest; i++ {
+					for i := 0; i < maxUrlsPerRequest; i++ {
 						urls = append(urls, "https://go.dev/images/go-logo-white.svg")
 					}
 					return urls
@@ -184,7 +184,7 @@ func TestProcessRequest(t *testing.T) {
 			if tt.args.Ctx.CancelFn != nil {
 				defer tt.args.Ctx.CancelFn()
 			}
-			request := httptest.NewRequest(tt.args.Method, Fetch, bytes.NewBuffer(body))
+			request := httptest.NewRequest(tt.args.Method, fetch, bytes.NewBuffer(body))
 			request = request.WithContext(tt.args.Ctx.Context)
 
 			w := httptest.NewRecorder()

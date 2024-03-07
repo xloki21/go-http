@@ -7,6 +7,7 @@ import (
 	"github.com/xloki21/go-http/internal/model"
 	"github.com/xloki21/go-http/internal/server/apperrors"
 	"github.com/xloki21/go-http/pkg/source"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,18 +19,23 @@ func FetchHandlerFunc(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var urlList []model.URL
-	decoder := json.NewDecoder(r.Body)
-	// 1. Check format
-	err := decoder.Decode(&urlList)
+	bBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		return apperrors.InvalidBodyErr
 	}
 
-	if len(urlList) > MaxUrlsPerRequest {
+	if err := json.Unmarshal(bBody, &urlList); err != nil {
+		return apperrors.InvalidBodyErr
+	}
+	if err != nil {
+		return apperrors.InvalidBodyErr
+	}
+
+	if len(urlList) > maxUrlsPerRequest {
 		return apperrors.TooBigURLListErr
 	}
 
-	result, err := source.FetchURLList(r.Context(), urlList, MaxOutgoingRequests, TimeoutPerRequest)
+	result, err := source.FetchURLList(r.Context(), urlList, maxOutgoingRequests, timeoutPerRequest)
 	if err != nil {
 
 		if errors.Is(err, context.DeadlineExceeded) {

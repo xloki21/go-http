@@ -5,6 +5,7 @@ import (
 	"github.com/xloki21/go-http/internal/model"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 )
@@ -20,23 +21,23 @@ func FetchURLList(ctx context.Context, urls []model.URL, maxConcurrentRequests i
 		go func() {
 			defer wg.Done()
 			for {
-				url, ok := <-tasks
+				urlAddr, ok := <-tasks
 				if !ok {
 					return
 				}
 
-				body, err := fetchURLWithTimeout(ctx, string(url), timeoutPerRequest)
+				body, err := fetchURLWithTimeout(ctx, string(urlAddr), timeoutPerRequest)
 				if err != nil {
 					errors <- err
 					return
 				}
-				resChan <- model.Result{URL: url, Content: body}
+				resChan <- model.Result{URL: urlAddr, Content: body}
 			}
 		}()
 	}
 
-	for _, url := range urls {
-		tasks <- url
+	for _, urlAddr := range urls {
+		tasks <- urlAddr
 	}
 	close(tasks)
 
@@ -53,7 +54,7 @@ func FetchURLList(ctx context.Context, urls []model.URL, maxConcurrentRequests i
 		}
 	}
 
-	var results []model.Result
+	results := make([]model.Result, 0, len(urls))
 	for result := range resChan {
 		results = append(results, result)
 	}
@@ -61,11 +62,15 @@ func FetchURLList(ctx context.Context, urls []model.URL, maxConcurrentRequests i
 	return results, err
 }
 
-func fetchURLWithTimeout(ctx context.Context, url string, timeout time.Duration) ([]byte, error) {
+func fetchURLWithTimeout(ctx context.Context, urlString string, timeout time.Duration) ([]byte, error) {
 	ctxTimeout, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctxTimeout, http.MethodGet, url, nil)
+	if _, err := url.Parse(urlString); err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctxTimeout, http.MethodGet, urlString, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +79,11 @@ func fetchURLWithTimeout(ctx context.Context, url string, timeout time.Duration)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+		}
+	}(resp.Body)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
