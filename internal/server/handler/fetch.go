@@ -8,7 +8,6 @@ import (
 	"github.com/xloki21/go-http/internal/server/apperrors"
 	"github.com/xloki21/go-http/pkg/source"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 )
@@ -45,12 +44,9 @@ func FetchHandlerFunc(w http.ResponseWriter, r *http.Request) error {
 			return apperrors.RequestCancelledErr
 		}
 
-		if err, ok := err.(*url.Error); ok {
-			if err, ok := err.Err.(*net.OpError); ok {
-				if _, ok := err.Err.(*net.DNSError); ok {
-					return apperrors.URLNotFoundErr
-				}
-			}
+		var errw *url.Error
+		if errors.As(err, &errw) {
+			return apperrors.URLNotFoundErr
 		}
 
 		// common case

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/xloki21/go-http/internal/metrics"
 	"github.com/xloki21/go-http/internal/server"
 	"github.com/xloki21/go-http/internal/server/handler"
 	"log/slog"
@@ -27,8 +28,12 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		_ = metrics.Listen("127.0.0.1:8082")
+	}()
+
+	quit := make(chan os.Signal)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	<-quit
 	ctx := context.Background()
 	if err := srv.Shutdown(ctx); err != nil {

@@ -47,7 +47,6 @@ func FetchURLList(ctx context.Context, urls []model.URL, maxConcurrentRequests i
 		close(errors)
 	}()
 
-	var err error
 	for err := range errors {
 		if err != nil {
 			return nil, err
@@ -59,7 +58,7 @@ func FetchURLList(ctx context.Context, urls []model.URL, maxConcurrentRequests i
 		results = append(results, result)
 	}
 
-	return results, err
+	return results, nil
 }
 
 func fetchURLWithTimeout(ctx context.Context, urlString string, timeout time.Duration) ([]byte, error) {
